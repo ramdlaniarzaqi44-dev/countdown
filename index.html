@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deadline SAS Gasal - SMAS Al-Multazam</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .time-box {
+            position: relative;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            min-width: 100px;
+            border-bottom: 4px solid #3b82f6;
+            transition: all 0.3s ease;
+        }
+
+        .glow-text {
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .particle {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); opacity: 0; }
+            50% { opacity: 0.5; }
+            100% { transform: translateY(-100vh); opacity: 0; }
+        }
+
+        @media (max-width: 640px) {
+            .time-box { min-width: 70px; padding: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="particles-container"></div>
+
+    <div class="container mx-auto px-4 z-10">
+        <div class="glass-card p-8 md:p-16 text-center max-w-4xl mx-auto border border-white/10">
+            <h1 class="text-2xl md:text-4xl font-extrabold mb-4 tracking-tight leading-tight">
+                DEADLINE TARGET <br class="hidden md:block">
+                <span class="text-blue-500 glow-text">PENGISIAN NILAI SAS GASAL</span>
+            </h1>
+            <p class="text-blue-200/60 mb-4 text-lg font-semibold tracking-wide uppercase">SMAS AL-MULTAZAM</p>
+            
+            <div id="deadline-info" class="text-slate-400 mb-12 text-sm italic transition-opacity duration-500">
+                Batas Akhir: 25 Desember 2025 pukul 23:59:00
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
+                <div class="time-box">
+                    <div id="days" class="text-3xl md:text-6xl font-bold text-white">00</div>
+                    <div class="text-xs uppercase tracking-widest mt-2 text-slate-400">Hari</div>
+                </div>
+                <div class="time-box">
+                    <div id="hours" class="text-3xl md:text-6xl font-bold text-white">00</div>
+                    <div class="text-xs uppercase tracking-widest mt-2 text-slate-400">Jam</div>
+                </div>
+                <div class="time-box">
+                    <div id="minutes" class="text-3xl md:text-6xl font-bold text-white">00</div>
+                    <div class="text-xs uppercase tracking-widest mt-2 text-slate-400">Menit</div>
+                </div>
+                <div class="time-box">
+                    <div id="seconds" class="text-3xl md:text-6xl font-bold text-white">00</div>
+                    <div class="text-xs uppercase tracking-widest mt-2 text-slate-400">Detik</div>
+                </div>
+            </div>
+
+            <div id="status-message" class="mt-12 text-blue-400 font-medium bg-blue-500/10 py-3 px-8 rounded-full inline-block border border-blue-500/20">
+                Menghubungkan ke server...
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDAoX6gQ-yOC457SZ_1h9s4v077xk5qnCQ",
+            authDomain: "countdown-altaz.firebaseapp.com",
+            projectId: "countdown-altaz",
+            storageBucket: "countdown-altaz.firebasestorage.app",
+            messagingSenderId: "78367809090",
+            appId: "1:78367809090:web:3eb700d7d633dbf1a6d7db"
+        };
+
+        // Inisialisasi Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        // Gunakan appId default atau dari lingkungan
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'countdown-altaz'; 
+        let targetTime = new Date("Dec 25, 2025 23:59:00").getTime();
+
+        const setStatus = (msg) => {
+            document.getElementById('status-message').innerText = msg;
+        };
+
+        async function initApp() {
+            // Pantau status autentikasi
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    console.log("Terautentikasi:", user.uid);
+                    subscribeToData();
+                } else {
+                    signInAnonymously(auth).catch(err => {
+                        console.error("Auth error:", err);
+                        setStatus("Gagal sinkronisasi: Aktifkan 'Anonymous Auth' di Firebase Console.");
+                    });
+                }
+            });
+        }
+
+        function subscribeToData() {
+            /** * PERBAIKAN: Path dokumen harus berjumlah genap (6 segmen).
+             * Path yang benar: artifacts/{appId}/public/data/settings/config
+             * atau menyesuaikan struktur koleksi yang benar.
+             * Di sini kita menggunakan struktur standar: artifacts -> appId -> public_data -> settings
+             */
+            const docRef = doc(db, 'artifacts', appId, 'public_data', 'settings');
+            
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.deadline) {
+                        targetTime = new Date(data.deadline).getTime();
+                        document.getElementById('deadline-info').innerText = `Batas Akhir: ${data.deadline}`;
+                    }
+                    if (data.message) {
+                        setStatus(data.message);
+                    } else {
+                        setStatus("Data sinkron secara real-time.");
+                    }
+                } else {
+                    setStatus("Dokumen 'settings' tidak ditemukan di Firestore.");
+                }
+            }, (error) => {
+                console.error("Firestore error:", error);
+                setStatus("Gagal memuat data dari Firestore.");
+            });
+        }
+
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const distance = targetTime - now;
+
+            const elements = {
+                days: document.getElementById("days"),
+                hours: document.getElementById("hours"),
+                minutes: document.getElementById("minutes"),
+                seconds: document.getElementById("seconds")
+            };
+
+            if (distance < 0) {
+                Object.values(elements).forEach(el => el.innerText = "00");
+                setStatus("WAKTU PENGISIAN TELAH BERAKHIR!");
+                return;
+            }
+
+            const d = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((distance % (1000 * 60)) / 1000);
+
+            elements.days.innerText = d.toString().padStart(2, '0');
+            elements.hours.innerText = h.toString().padStart(2, '0');
+            elements.minutes.innerText = m.toString().padStart(2, '0');
+            elements.seconds.innerText = s.toString().padStart(2, '0');
+        }
+
+        setInterval(updateCountdown, 1000);
+        initApp();
+
+        // Animasi partikel
+        const container = document.getElementById('particles-container');
+        for (let i = 0; i < 20; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            const size = Math.random() * 3 + 2;
+            p.style.width = `${size}px`;
+            p.style.height = `${size}px`;
+            p.style.left = `${Math.random() * 100}vw`;
+            p.style.bottom = `-10px`;
+            p.style.animation = `float ${Math.random() * 10 + 5}s linear infinite`;
+            container.appendChild(p);
+        }
+    </script>
+</body>
+</html>
